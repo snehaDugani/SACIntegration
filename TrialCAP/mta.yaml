@@ -1,0 +1,114 @@
+_schema-version: '3.2'
+ID: TrialCAP
+version: 0.0.1
+
+parameters:
+  enable-parallel-deployments: true
+
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install --production
+        - npx -p @sap/cds-dk cds build --production
+
+modules:
+
+
+  # --------------------- SERVER MODULE ------------------------
+  - name: TrialCAP-srv
+  # ------------------------------------------------------------
+    type: nodejs
+    path: gen/srv
+    build-parameters:
+      ignore:
+        - default-*.json
+        - .env
+        - "*node_modules*"
+        - package-lock.json
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 512M
+      disk-quota: 1024M
+    requires:
+      - name: TrialCAP-uaa
+      - name: TrialCAP-dest
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: ${default-url}
+
+
+
+
+  # ------------------ APP ROUTER MODULE -----------------------
+  - name: TrialCAP-app
+  # ------------------------------------------------------------
+    type: approuter.nodejs
+    path: app
+    build-parameters:
+      ignore:
+        - default-*.json
+        - .env
+        - "*node_modules*"
+        - package-lock.json
+    parameters:
+      memory: 256M
+      disk-quota: 1024M
+    requires:
+      - name: TrialCAP-uaa
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv
+          url: ~{srv-url}
+          timeout: 600000
+          forwardAuthToken: true
+
+
+resources:
+  # ----------------------- UAA SERVICE ------------------------
+  - name: TrialCAP-uaa
+  # ------------------------------------------------------------
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+
+  # -------------------- DESTINATION SERVICE -------------------
+  - name: TrialCAP-dest
+  # ------------------------------------------------------------
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: destination
+      service-plan: lite
+      config:
+        init_data:
+          instance:
+            existing_destinations_policy: ignore
+            destinations:
+              - Name: TrialCAP-sac-tenant-api
+                Description: SAP Analytics Cloud Tenant API
+                URL: https://qrc-uat.rel.canary.eu10.projectorca.cloud/
+                Type: HTTP
+                ProxyType: Internet
+                Authentication: OAuth2SAMLBearerAssertion
+                audience: https://qrc-uat.authentication.sap.hana.ondemand.com
+                authnContextClassRef: urn:oasis:names:tc:SAML:2.0:ac:classes:PreviousSession
+                clientKey: <SetValueInCockpit>
+                tokenServiceURL: https://qrc-uat.authentication.sap.hana.ondemand.com/oauth/token/alias/qrc-uat.canary
+                tokenServiceUser: <SetValueInCockpit>
+                tokenServicePassword: <SetValueInCockpit>
+                nameIdFormat: urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress
+                userIdSource: email
+                URL.headers.Application-Interface-Key: <SetValueInCockpit>
+                HTML5.DynamicDestination: true
+
+
+
+
+
+
+
+
